@@ -61,4 +61,7 @@ public class SeatService {
                 .queue(queueName)
                 .payload(payload)
                 .header("MessageGroupId", eventId.toString()) // Garante ordenação por evento/show nas filas FIFO
-                .header("MessageDeduplicationId",
+                .header("MessageDeduplicationId", payload.sagaId())
+        );
+    }
+}
