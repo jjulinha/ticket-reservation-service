@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.unisul.seatreservation.mapper.BookingMapper">
+
+    <resultMap id="BookingWithTicketsMap" type="com.unisul.seatreservation.domain.Booking">
+        <id property="orderId" column="order_id" typeHandler="com.unisul.seatreservation.config.UuidBinaryTypeHandler"/>
+        <result property="userId" column="user_id" typeHandler="com.unisul.seatreservation.config.UuidBinaryTypeHandler"/>
+        <result property="eventId" column="event_id" typeHandler="com.unisul.seatreservation.config.UuidBinaryTypeHandler"/>
+        <result property="bookingStatus" column="booking_status" />
+        <result property="totalPrice" column="total_price" />
+        <result property="createdAt" column="created_at" />
+
+        <collection property="tickets" ofType="com.unisul.seatreservation.domain.Ticket">
+            <id property="ticketId" column="ticket_id" typeHandler="com.unisul.seatreservation.config.UuidBinaryTypeHandler"/>
+            <result property="orderId" column="ticket_order_id" typeHandler="com.unisul.seatreservation.config.UuidBinaryTypeHandler"/>
+            <result property="eventId" column="ticket_event_id" typeHandler="com.unisul.seatreservation.config.UuidBinaryTypeHandler"/>
+            <result property="seatIdentifier" column="seat_identifier" />
+            <result property="ticketPrice" column="ticket_price" />
+            <result property="ticketType" column="ticket_type" />
+        </collection>
+    </resultMap>
+
+    <select id="findBookingWithTickets" resultMap="BookingWithTicketsMap">
+        SELECT
+        b.order_id,
+        b.user_id,
+        b.event_id,
+        b.booking_status,
+        b.total_price,
+        b.created_at,
+        t.ticket_id,
+        t.order_id AS ticket_order_id,
+        t.event_id AS ticket_event_id,
+        t.seat_identifier,
+        t.ticket_price,
+        t.ticket_type
+        FROM tb_bookings b
+        LEFT JOIN tb_tickets t ON b.order_id = t.order_id
+        WHERE b.order_id = #{orderId}
+    </select>
+
+    <select id="findTicketsByOrderId" resultType="com.unisul.seatreservation.domain.Ticket">
+        SELECT
+        ticket_id AS ticketId,
+        order_id AS orderId,
+        event_id AS eventId,
+        seat_identifier AS seatIdentifier,
+        ticket_price AS ticketPrice,
+        ticket_type AS ticketType
+        FROM tb_tickets
+        WHERE order_id = #{orderId}
+    </select>
+
+    <update id="decrementStock">
+        UPDATE tb_event_stock
+        SET available_capacity = available_capacity - #{quantity}
+        WHERE event_id = #{eventId}
+        AND available_capacity >= #{quantity}
+    </update>
+
+    <update id="incrementStock">
+        UPDATE tb_event_stock
+        SET available_capacity = available_capacity + #{quantity}
+        WHERE event_id = #{eventId}
+    </update>
+
+    <insert id="insertEventStock">
+        INSERT INTO tb_event_stock (event_id, available_capacity)
+        VALUES (#{eventId}, #{capacity})
+        ON DUPLICATE KEY UPDATE available_capacity = #{capacity}
+    </insert>
+
+    <insert id="insertBooking" parameterType="com.unisul.seatreservation.domain.Booking">
+        INSERT INTO tb_bookings (order_id, user_id, event_id, booking_status, total_price)
+        VALUES (#{orderId}, #{userId}, #{eventId}, #{bookingStatus}, #{totalPrice})
+    </insert>
+
+    <insert id="insertTicket" parameterType="com.unisul.seatreservation.domain.Ticket">
+        INSERT INTO tb_tickets (ticket_id, order_id, event_id, seat_identifier, ticket_price, ticket_type)
+        VALUES (#{ticketId}, #{orderId}, #{eventId}, #{seatIdentifier}, #{ticketPrice}, #{ticketType})
+    </insert>
+
+    <update id="updateBookingStatus">
+        UPDATE tb_bookings
+        SET booking_status = #{status}
+        WHERE order_id = #{orderId}
+    </update>
+
+</mapper>
