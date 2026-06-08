@@ -8,6 +8,7 @@ import com.unisul.seatreservation.mapper.BookingMapper;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,9 +41,10 @@ public class SeatTransactionService {
         booking.setUserId(userId);
         booking.setEventId(eventId);
         booking.setBookingStatus("PENDING");
-        booking.setTotalPrice(event.totalPrice());
 
         bookingMapper.insertBooking(booking);
+
+        BigDecimal ticketPrice = bookingMapper.getEventTicketPrice(eventId);
 
         for (OrderCreatedEvent.ItemEvent item : event.items()) {
             Ticket ticket = new Ticket();
@@ -50,8 +52,8 @@ public class SeatTransactionService {
             ticket.setOrderId(orderId);
             ticket.setEventId(eventId);
             ticket.setSeatIdentifier(item.seatIdentifier());
-            ticket.setTicketPrice(event.totalPrice());
             ticket.setTicketType(item.ticketType());
+            ticket.setTicketPrice(ticketPrice);
 
             bookingMapper.insertTicket(ticket);
         }
@@ -73,7 +75,7 @@ public class SeatTransactionService {
     }
 
     @Transactional
-    public void executeRegisterNewEventStock(UUID eventId, int capacity) {
-        bookingMapper.insertEventStock(eventId, capacity);
+    public void executeRegisterNewEventStock(UUID eventId, int capacity, BigDecimal ticketPrice) {
+        bookingMapper.insertEventStock(eventId, capacity, ticketPrice);
     }
 }

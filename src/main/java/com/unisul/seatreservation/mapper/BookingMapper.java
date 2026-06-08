@@ -4,6 +4,8 @@ import com.unisul.seatreservation.domain.Booking;
 import com.unisul.seatreservation.domain.Ticket;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,7 +22,9 @@ public interface BookingMapper {
 
     int incrementStock(@Param("eventId") UUID eventId, @Param("quantity") int quantity);
 
-    void insertEventStock(@Param("eventId") UUID eventId, @Param("capacity") int capacity);
+    void insertEventStock(@Param("eventId") UUID eventId, @Param("capacity") int capacity, @Param("ticketPrice") BigDecimal ticketPrice);
+
+    BigDecimal getEventTicketPrice(@Param("eventId") UUID eventId);
 
     void insertBooking(Booking booking);
 

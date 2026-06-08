@@ -1,6 +1,5 @@
 package com.unisul.seatreservation.domain;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -11,7 +10,6 @@ public class Booking {
     private UUID userId;
     private UUID eventId;
     private String bookingStatus;
-    private BigDecimal totalPrice;
     private LocalDateTime createdAt;
     private List<Ticket> tickets;
 
@@ -28,9 +26,6 @@ public class Booking {
 
     public String getBookingStatus() { return bookingStatus; }
     public void setBookingStatus(String bookingStatus) { this.bookingStatus = bookingStatus; }
-
-    public BigDecimal getTotalPrice() { return totalPrice; }
-    public void setTotalPrice(BigDecimal totalPrice) { this.totalPrice = totalPrice; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

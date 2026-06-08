@@ -1,11 +1,13 @@
 package com.unisul.seatreservation.service;
 
 import com.unisul.seatreservation.domain.ReservationResult;
-import com.unisul.seatreservation.dto.EventCreatedEvent;
-import com.unisul.seatreservation.dto.OrderCreatedEvent;
-import com.unisul.seatreservation.dto.OrderResponseEvent;
+import com.unisul.seatreservation.domain.Ticket;
+import com.unisul.seatreservation.dto.*;
+import com.unisul.seatreservation.mapper.BookingMapper;
 import org.springframework.stereotype.Service;
 import io.awspring.cloud.sqs.operations.SqsTemplate;
+
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -16,10 +18,12 @@ public class SeatService {
 
     private static final String FILA_CANCELADO = "fila-pedido-cancelado.fifo";
     private static final String FILA_PAGAMENTO = "fila-processar-pagamento.fifo";
+    private final BookingMapper bookingMapper;
 
-    public SeatService(SqsTemplate sqsTemplate, SeatTransactionService seatTransactionService) {
+    public SeatService(SqsTemplate sqsTemplate, SeatTransactionService seatTransactionService, BookingMapper bookingMapper) {
         this.sqsTemplate = sqsTemplate;
         this.seatTransactionService = seatTransactionService;
+        this.bookingMapper = bookingMapper;
     }
 
     public void processStockReservation(OrderCreatedEvent event) {
@@ -31,16 +35,20 @@ public class SeatService {
 
         switch (result){
             case SUCCESS:
-                OrderResponseEvent successPayload = new OrderResponseEvent(event.sagaId(), event.orderId(), "RESERVA_CONFIRMADA");
+                List<Ticket> tickets = bookingMapper.findTicketsByOrderId(orderId);
+                List<TicketResultDTO> ticketResultDTO = TicketResultDTO.fromList(tickets);
+
+                OrderResponseEvent successPayload = new OrderResponseEvent(event.sagaId(), event.orderId(), ticketResultDTO);
                 sendToQueue(FILA_PAGAMENTO, successPayload, eventId);
                 break;
 
             case ALREADY_PROCESSED:
-                //log
+                FailureResponseEvent alreadyProcessedPayload = new FailureResponseEvent(event.sagaId(), event.orderId(), "PEDIDO_JA_PROCESSADO");
+                sendToQueue(FILA_CANCELADO, alreadyProcessedPayload, eventId);
                 break;
 
             case OUT_OF_STOCK:
-                OrderResponseEvent failurePayload = new OrderResponseEvent(event.sagaId(), event.orderId(), "ASSENTO_INDISPONIVEL");
+                FailureResponseEvent failurePayload = new FailureResponseEvent(event.sagaId(), event.orderId(), "ASSENTO_INDISPONIVEL");
                 sendToQueue(FILA_CANCELADO, failurePayload, eventId);
                 break;
         }
@@ -53,10 +61,10 @@ public class SeatService {
 
     public void registerNewEventStock(EventCreatedEvent event) {
         UUID eventId = UUID.fromString(event.eventId());
-        seatTransactionService.executeRegisterNewEventStock(eventId, event.capacity());
+        seatTransactionService.executeRegisterNewEventStock(eventId, event.capacity(), event.ticketPrice());
     }
 
-    private void sendToQueue(String queueName, OrderResponseEvent payload, UUID eventId) {
+    private void sendToQueue(String queueName, SagaResponseEvent payload, UUID eventId) {
         sqsTemplate.send(to -> to
                 .queue(queueName)
                 .payload(payload)
