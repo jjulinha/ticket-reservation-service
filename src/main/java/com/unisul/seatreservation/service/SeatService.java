@@ -38,7 +38,8 @@ public class SeatService {
                 List<Ticket> tickets = bookingMapper.findTicketsByOrderId(orderId);
                 List<TicketResultDTO> ticketResultDTO = TicketResultDTO.fromList(tickets);
 
-                OrderResponseEvent successPayload = new OrderResponseEvent(event.sagaId(), event.orderId(), ticketResultDTO);
+                OrderResponseEvent successPayload = new OrderResponseEvent(event.sagaId(), event.orderId(),
+                        ticketResultDTO, event.paymentMethod(), event.installments());
                 sendToQueue(FILA_PAGAMENTO, successPayload, eventId);
                 break;
 
