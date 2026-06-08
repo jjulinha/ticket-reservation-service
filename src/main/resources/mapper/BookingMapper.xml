@@ -9,7 +9,6 @@
         <result property="userId" column="user_id" typeHandler="com.unisul.seatreservation.config.UuidBinaryTypeHandler"/>
         <result property="eventId" column="event_id" typeHandler="com.unisul.seatreservation.config.UuidBinaryTypeHandler"/>
         <result property="bookingStatus" column="booking_status" />
-        <result property="totalPrice" column="total_price" />
         <result property="createdAt" column="created_at" />
 
         <collection property="tickets" ofType="com.unisul.seatreservation.domain.Ticket">
@@ -21,6 +20,12 @@
             <result property="ticketType" column="ticket_type" />
         </collection>
     </resultMap>
+    
+    <resultMap id="eventStock" type="com.unisul.seatreservation.domain.EventStock">
+        <id property="eventId" column="event_id" typeHandler="com.unisul.seatreservation.config.UuidBinaryTypeHandler"/>
+        <result property="capacity" column="available_capacity"/>
+        <result property="ticketPrice" column="ticket_price"/>
+    </resultMap>
 
     <select id="findBookingWithTickets" resultMap="BookingWithTicketsMap">
         SELECT
@@ -28,7 +33,6 @@
         b.user_id,
         b.event_id,
         b.booking_status,
-        b.total_price,
         b.created_at,
         t.ticket_id,
         t.order_id AS ticket_order_id,
@@ -71,10 +75,16 @@
         VALUES (#{eventId}, #{capacity})
         ON DUPLICATE KEY UPDATE available_capacity = #{capacity}
     </insert>
+    
+    <select id="getEventTicketPrice" resultType="java.math.BigDecimal">
+        SELECT ticket_price AS ticketPrice
+        FROM tb_event_stock
+        WHERE event_id = #{eventId, typeHandler=com.unisul.seatreservation.config.UuidBinaryTypeHandler}
+    </select>
 
     <insert id="insertBooking" parameterType="com.unisul.seatreservation.domain.Booking">
-        INSERT INTO tb_bookings (order_id, user_id, event_id, booking_status, total_price)
-        VALUES (#{orderId}, #{userId}, #{eventId}, #{bookingStatus}, #{totalPrice})
+        INSERT INTO tb_bookings (order_id, user_id, event_id, booking_status)
+        VALUES (#{orderId}, #{userId}, #{eventId}, #{bookingStatus})
     </insert>
 
     <insert id="insertTicket" parameterType="com.unisul.seatreservation.domain.Ticket">

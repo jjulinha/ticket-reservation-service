@@ -36,8 +36,8 @@ public class BookingQueueListener {
      * Escuta o cadastro de novos eventos/shows vindos do Serviço de Eventos
      * para espelhar a capacidade máxima de assentos permitida.
      */
-    /*@SqsListener("fila-evento-cadastrado-replicacao")
+    @SqsListener("fila-evento-cadastrado.fifo")
     public void handleNewEventCreated(EventCreatedEvent event) {
         seatService.registerNewEventStock(event);
-    }*/
+    }
 }
