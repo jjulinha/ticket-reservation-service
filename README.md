@@ -78,7 +78,7 @@ O serviço opera de forma assíncrona via filas SQS FIFO, sem expor endpoints RE
 
 
 
-\- `tb\_event\_stock` — estoque atual por evento (`available\_capacity`)
+\- `tb\_event\_stock` — estoque atual por evento e valor por ticket (`available\_capacity`, `ticket\_price`)
 
 \- `tb\_bookings` — reservas (orderId, userId, eventId, status, total)
 
@@ -130,7 +130,7 @@ mvn spring-boot:run
 
 
 
-Porta padrão: 8081
+Porta padrão: 8082
 
 
 
