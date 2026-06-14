@@ -71,8 +71,8 @@
     </update>
 
     <insert id="insertEventStock">
-        INSERT INTO tb_event_stock (event_id, available_capacity)
-        VALUES (#{eventId}, #{capacity})
+        INSERT INTO tb_event_stock (event_id, available_capacity, ticket_price)
+        VALUES (#{eventId}, #{capacity}, #{ticketPrice})
         ON DUPLICATE KEY UPDATE available_capacity = #{capacity}
     </insert>
     
