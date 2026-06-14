@@ -5,39 +5,50 @@ import com.unisul.seatreservation.dto.OrderCreatedEvent;
 import com.unisul.seatreservation.dto.OrderResponseEvent;
 import com.unisul.seatreservation.service.SeatService;
 import io.awspring.cloud.sqs.annotation.SqsListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class BookingQueueListener {
 
+    private static final Logger log = LoggerFactory.getLogger(BookingQueueListener.class);
     private final SeatService seatService;
 
     public BookingQueueListener(SeatService seatService) {
         this.seatService = seatService;
     }
 
-    /**
-     * Escuta requisições vindas do Order Service para checar e travar assentos.
-     */
     @SqsListener("fila-reserva-assentos.fifo")
     public void handleOrderCreated(OrderCreatedEvent event) {
-        seatService.processStockReservation(event);
+        log.info("Recebida solicitacao para reservar assentos | orderId: {} | sagaId: {}", event.orderId(), event.sagaId());
+        try {
+            seatService.processStockReservation(event);
+        } catch (Exception e) {
+            log.error("Falha inesperada ao processar reserva de assentos | orderId: {} | sagaId: {} | errorMessage: {}",
+                    event.orderId(), event.sagaId(), e.getMessage(), e);
+        }
     }
 
-    /**
-     * Escuta eventos de compensação disparados pelo serviço de Pagamentos.
-     */
     @SqsListener("fila-compensar-reserva.fifo")
     public void handlePaymentFailed(OrderResponseEvent event) {
-        seatService.compensateReservation(event);
+        log.info("Recebido comando de COMPENSACAO (Estorno de Assentos) | orderId: {} | sagaId: {}", event.orderId(), event.sagaId());
+        try {
+            seatService.compensateReservation(event);
+        } catch (Exception e) {
+            log.error("Falha inesperada ao compensar reserva | orderId: {} | sagaId: {} | errorMessage: {}",
+                    event.orderId(), event.sagaId(), e.getMessage(), e);
+        }
     }
 
-    /**
-     * Escuta o cadastro de novos eventos/shows vindos do Serviço de Eventos
-     * para espelhar a capacidade máxima de assentos permitida.
-     */
     @SqsListener("fila-evento-cadastrado.fifo")
     public void handleNewEventCreated(EventCreatedEvent event) {
-        seatService.registerNewEventStock(event);
+        log.info("Recebido cadastro de novo evento para controle de estoque | eventId: {}", event.eventId());
+        try {
+            seatService.registerNewEventStock(event);
+        } catch (Exception e) {
+            log.error("Falha inesperada ao registrar estoque do novo evento | eventId: {} | errorMessage: {}",
+                    event.eventId(), e.getMessage(), e);
+        }
     }
 }
