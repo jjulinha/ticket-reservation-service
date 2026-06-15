@@ -1,150 +1,84 @@
-\# Ticket Reservation Service
+# Ticket Reservation Service (Seat Reservation)
 
+Serviço de controle de estoque e reserva de assentos/tickets. Não expõe API REST — opera 100% via filas SQS, atuando como o "estoque" da saga: reserva assentos no pedido, confirma na aprovação do pagamento e compensa (devolve estoque) em caso de falha.
 
+## Stack
 
-Microsserviço de reserva de assentos para o sistema distribuído de venda de ingressos online (A3 — Sistemas Distribuídos e Mobile, UNISUL).
+- Java 21 + Spring Boot
+- MyBatis + MySQL + Flyway
+- Spring Cloud AWS SQS (`@SqsListener`, filas FIFO)
+- Spring Boot Actuator + Micrometer/Prometheus
 
+## Responsabilidades
 
+- Registrar o estoque inicial de um evento quando ele é criado
+- Reservar assentos/tickets para um pedido (com checagem de idempotência e de disponibilidade)
+- Confirmar reserva quando o pagamento é aprovado
+- Compensar (liberar) a reserva quando o pagamento falha
 
-\## Responsabilidade
+## Integração via SQS (sem endpoints REST)
 
+| Fila consumida | Origem | Ação |
+|---|---|---|
+| `fila-evento-cadastrado.fifo` | Event Service | `registerNewEventStock` — cria estoque inicial (`capacity`, `ticketPrice`) para o evento |
+| `fila-reserva-assentos.fifo` | Order Service | `processStockReservation` — tenta reservar os assentos do pedido |
+| `fila-confirmar-reserva.fifo` | Payment Service | `paymentSuccess` — confirma definitivamente a reserva |
+| `fila-compensar-reserva.fifo` | Payment Service | `compensateReservation` — desfaz a reserva (estorno de estoque) |
 
+| Fila publicada | Destino | Quando |
+|---|---|---|
+| `fila-processar-pagamento.fifo` | Payment Service | Reserva bem-sucedida (`SUCCESS`) — envia lista de tickets reservados |
+| `fila-pedido-cancelado.fifo` | Order Service | Reserva falhou: `OUT_OF_STOCK` (sem assentos) ou `ALREADY_PROCESSED` (idempotência) |
 
-Este serviço é responsável por:
+## Fluxo de reserva (`processStockReservation`)
 
+`ReservationResult` pode ser:
 
+- **`SUCCESS`**: assentos reservados → busca tickets do pedido, monta `OrderResponseEvent` (lista de `TicketResultDTO`, método de pagamento, parcelas) e publica em `fila-processar-pagamento.fifo`.
+- **`ALREADY_PROCESSED`**: pedido já processado anteriormente (idempotência) → publica `FailureResponseEvent` (`PEDIDO_JA_PROCESSADO`) em `fila-pedido-cancelado.fifo`.
+- **`OUT_OF_STOCK`**: sem assentos disponíveis → publica `FailureResponseEvent` (`ASSENTO_INDISPONIVEL`) em `fila-pedido-cancelado.fifo`.
 
-\- Receber pedidos de reserva via fila SQS (vindos do Order Service)
+Mensagens usam `eventId` como `MessageGroupId` e `sagaId` como `MessageDeduplicationId`.
 
-\- Decrementar atomicamente o estoque de assentos por evento
+## Modelo de domínio
 
-\- Persistir a reserva (booking) e os ingressos (tickets) emitidos
+- `EventStock`: estoque por evento (capacidade, preço do ticket)
+- `Booking`: reserva associada a um pedido
+- `Ticket`: ticket individual (id, tipo, preço, assento)
+- `ReservationResult`: enum de resultado da tentativa de reserva (`SUCCESS`, `ALREADY_PROCESSED`, `OUT_OF_STOCK`)
 
-\- Publicar resultado em fila SQS de pagamento (sucesso) ou cancelamento (estoque insuficiente)
+## Configuração (variáveis de ambiente)
 
-\- Compensar reservas em caso de falha de pagamento (devolver estoque, marcar booking como `COMPENSATED`)
+| Variável | Descrição |
+|---|---|
+| `SERVER_PORT` | Porta do serviço (default `8080`) — usada apenas para Actuator |
+| `DATABASE_URL` / `DATABASE_USERNAME` / `DATABASE_PASSWORD` | Conexão MySQL |
+| `AWS_REGION` | Região AWS (default `us-east-1`) |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` | Credenciais AWS para SQS |
 
+## Banco de dados
 
+- Flyway (`db/migration`, `baseline-on-migrate=true`).
+- Mappers MyBatis em `classpath:mapper/*.xml`, `map-underscore-to-camel-case=true`.
+- `UuidBinaryTypeHandler` mapeia `UUID` ↔ `BINARY(16)`.
 
-\## Stack
+## Observabilidade
 
+Actuator: `health`, `info`, `metrics`, `prometheus`, com tag `application=ticket-service`.
 
+## Execução local
 
-\- Java 21
+```bash
+docker build -t ticket-service .
+docker run -p 8080:8080 \
+  -e DATABASE_URL=jdbc:mysql://localhost:3306/tickets \
+  -e DATABASE_USERNAME=root \
+  -e DATABASE_PASSWORD=secret \
+  -e AWS_ACCESS_KEY_ID=... \
+  -e AWS_SECRET_ACCESS_KEY=... \
+  ticket-service
+```
 
-\- Spring Boot 4.0.6
+## Papel na arquitetura
 
-\- MyBatis (acesso a dados, sem JPA)
-
-\- MySQL 8 (BINARY(16) para IDs UUIDv7)
-
-\- Flyway (versionamento de schema)
-
-\- AWS SDK + Spring Cloud AWS (SQS FIFO)
-
-\- Maven
-
-
-
-\## Arquitetura
-
-
-
-O serviço opera de forma assíncrona via filas SQS FIFO, sem expor endpoints REST públicos.
-
-
-
-\### Filas consumidas
-
-
-
-\- `fila-reserva-assentos.fifo` — pedidos de reserva (Order Service)
-
-\- `fila-compensar-reserva.fifo` — pedidos de compensação (Payment Service)
-
-
-
-\### Filas publicadas
-
-
-
-\- `fila-processar-pagamento.fifo` — reserva confirmada, pronta para cobrar
-
-\- `fila-pedido-cancelado.fifo` — reserva falhou (estoque insuficiente)
-
-
-
-\### Tabelas
-
-
-
-\- `tb\_event\_stock` — estoque atual por evento e valor por ticket (`available\_capacity`, `ticket\_price`)
-
-\- `tb\_bookings` — reservas (orderId, userId, eventId, status, total)
-
-\- `tb\_tickets` — ingressos emitidos por reserva (1 booking -> N tickets)
-
-
-
-\## Requisitos distribuídos atendidos
-
-
-
-\- \*\*Controle de concorrência\*\*: `UPDATE ... WHERE available\_capacity >= quantity` é atômico por linha no MySQL — duas reservas concorrentes pelo mesmo evento não causam overselling. O `CHECK (available\_capacity >= 0)` na tabela garante a invariante mesmo em caso de bug.
-
-\- \*\*Idempotência\*\*: antes de processar, o serviço verifica se o `orderId` já existe no banco. Se sim, retorna `ALREADY\_PROCESSED` sem efeitos colaterais. Atende redentrega de mensagens (SQS é at-least-once). Adicionalmente, `MessageDeduplicationId = sagaId` na publicação para deduplicação na própria fila.
-
-\- \*\*Resiliência\*\*: padrão Saga com compensação. Falha em qualquer ponto downstream (pagamento) dispara `executeCompensation`, que devolve o estoque ao evento e marca a reserva como `COMPENSATED`.
-
-\- \*\*Atomicidade\*\*: todos os métodos críticos anotados com `@Transactional` — rollback automático em caso de exceção.
-
-
-
-\## Variáveis de ambiente
-
-
-
-DATABASE\_URL=jdbc:mysql://localhost:3306/seat\_reservation
-
-DATABASE\_USERNAME=...
-
-DATABASE\_PASSWORD=...
-
-AWS\_REGION=us-east-1
-
-AWS\_ACCESS\_KEY\_ID=...
-
-AWS\_SECRET\_ACCESS\_KEY=...
-
-AWS\_SESSION\_TOKEN=...
-
-
-
-\## Execução
-
-
-
-mvn clean install
-
-mvn spring-boot:run
-
-
-
-Porta padrão: 8082
-
-
-
-\## Observabilidade
-
-
-
-Endpoints do Spring Actuator expostos em `/actuator`:
-
-
-
-\- `/actuator/health` — health check
-
-\- `/actuator/metrics` — métricas
-
-\- `/actuator/prometheus` — formato Prometheus (consumível pelo Grafana)
-
+Guardião do estoque na saga. Não tem API pública — toda interação é assíncrona via SQS, com consistência garantida por idempotência (`ALREADY_PROCESSED`) e compensação (devolução de estoque em falha de pagamento).
