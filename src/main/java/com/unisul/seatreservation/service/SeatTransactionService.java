@@ -71,6 +71,23 @@ public class SeatTransactionService {
     }
 
     @Transactional
+    public void executePaymentSuccess(UUID orderId){
+        List<Ticket> ticketsReservados = bookingMapper.findTicketsByOrderId(orderId);
+
+        if (ticketsReservados != null && !ticketsReservados.isEmpty()) {
+            UUID eventId = ticketsReservados.get(0).getEventId();
+            int quantidadeAssentosConfirmados = ticketsReservados.size();
+
+            bookingMapper.updateBookingStatus(orderId, "APPROVED");
+
+            log.info("Confirmação de pagamento concluída: Status atualizado para APPROVED | orderId: {} | eventId: {} | assentosConfirmados: {}",
+                    orderId, eventId, quantidadeAssentosConfirmados);
+        } else {
+            log.warn("Confirmação de pagamento ignorada: Nenhum assento encontrado para o pedido | orderId: {}", orderId);
+        }
+    }
+
+    @Transactional
     public void executeCompensation(UUID orderId) {
         List<Ticket> ticketsReservados = bookingMapper.findTicketsByOrderId(orderId);
 

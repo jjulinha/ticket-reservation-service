@@ -30,6 +30,17 @@ public class BookingQueueListener {
         }
     }
 
+    @SqsListener("fila-confirmar-reserva.fifo")
+    public void handlePaymentSuccess(OrderResponseEvent event){
+        log.info("Recebida confirmação de pagamento | orderId: {} | sagaId: {}", event.orderId(), event.sagaId());
+        try {
+            seatService.paymentSuccess(event);
+        } catch (Exception e) {
+            log.error("Falha inesperada ao confirmar pagamento | orderId: {} | sagaId: {} | errorMessage: {}",
+                    event.orderId(), event.sagaId(), e.getMessage(), e);
+        }
+    }
+
     @SqsListener("fila-compensar-reserva.fifo")
     public void handlePaymentFailed(OrderResponseEvent event) {
         log.info("Recebido comando de COMPENSACAO (Estorno de Assentos) | orderId: {} | sagaId: {}", event.orderId(), event.sagaId());
