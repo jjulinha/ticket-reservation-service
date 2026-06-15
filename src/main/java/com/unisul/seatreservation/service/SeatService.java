@@ -64,6 +64,12 @@ public class SeatService {
         }
     }
 
+    public void paymentSuccess(OrderResponseEvent event){
+        UUID orderId = UUID.fromString(event.orderId());
+        log.info("Iniciando rotina de confirmação de pagamento (Saga) | orderId: {}", orderId);
+        seatTransactionService.executePaymentSuccess(orderId);
+    }
+
     public void compensateReservation(OrderResponseEvent event) {
         UUID orderId = UUID.fromString(event.orderId());
         log.info("Iniciando rotina de compensacao de reserva (Saga) | orderId: {}", orderId);
